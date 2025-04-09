@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/convert", "destination": "/convert.html" },
+    { "source": "/editor/:path*", "destination": "/editor/Reactive-Resume-main/build/index.html" }
+  ]
+}
