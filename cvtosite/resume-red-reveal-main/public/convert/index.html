@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CVtoSite → Reactive Resume Converter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background: #f9fafb;
+    }
+    .drop-zone {
+      border: 2px dashed #0ea5e9;
+      padding: 3rem;
+      text-align: center;
+      background: white;
+      border-radius: 1rem;
+      cursor: pointer;
+    }
+    .output, .error {
+      margin-top: 2rem;
+      padding: 1rem;
+      border-radius: 0.5rem;
+    }
+    .output {
+      background: #e5f6fd;
+    }
+    .error {
+      background: #ffe5e5;
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <h1>CVtoSite → Reactive Resume Converter</h1>
+  <div class="drop-zone" id="drop-zone">
+    <p><strong>Drop your CVtoSite JSON file here</strong> or click to upload</p>
+    <input type="file" id="fileInput" style="display: none" accept="application/json" />
+  </div>
+  <div class="output" id="output" style="display: none">
+    <p>✅ File converted! <a id="downloadLink" href="#" download="rxresume-converted.json">Download JSON</a></p>
+  </div>
+  <div class="error" id="error" style="display: none"></div>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('fileInput');
+    const output = document.getElementById('output');
+    const errorDiv = document.getElementById('error');
+    const downloadLink = document.getElementById('downloadLink');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#2563eb';
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = '#0ea5e9');
+    dropZone.addEventListener('drop', handleFile);
+    fileInput.addEventListener('change', e => handleFile(e));
+
+    function showError(message) {
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      output.style.display = 'none';
+    }
+
+    function handleFile(e) {
+      e.preventDefault();
+      const file = e.dataTransfer ? e.dataTransfer.files[0] : e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const inputData = JSON.parse(e.target.result);
+          const converted = convert(inputData);
+          const blob = new Blob([JSON.stringify(converted, null, 2)], { type: 'application/json' });
+          downloadLink.href = URL.createObjectURL(blob);
+          output.style.display = 'block';
+          errorDiv.style.display = 'none';
+        } catch (err) {
+          showError("❌ Conversion failed: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function cuid2() {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      return Array.from({ length: 22 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    function convert(data) {
+      const profile = data.profile || {};
+      const contact = profile.contact || {};
+
+      const basics = {
+        name: profile.name || '',
+        email: contact.email || '',
+        phone: contact.phone || '',
+        headline: profile.headline || '',
+        summary: profile.bio || '',
+        location: contact.location || '',
+        url: { label: '', href: '' },
+        customFields: [],
+        picture: {
+          url: '',
+          size: 100,
+          aspectRatio: 1,
+          borderRadius: 0,
+          effects: { hidden: false, border: false, grayscale: false }
+        }
+      };
+
+      const experience = (profile.experience || []).map(job => ({
+        id: cuid2(),
+        visible: true,
+        company: job.company || '',
+        position: job.title || '',
+        location: '',
+        date: job.period || '',
+        summary: `<p>${(job.details || []).join('<br>')}</p>`,
+        url: { label: '', href: '' }
+      }));
+
+      const education = (profile.education || []).map(edu => ({
+        id: cuid2(),
+        visible: true,
+        institution: edu.institution || '',
+        studyType: edu.degree || '',
+        area: '',
+        score: '',
+        date: edu.year || '',
+        summary: '',
+        url: { label: '', href: '' }
+      }));
+
+      const skills = (profile.skills || []).map(skill => ({
+        id: cuid2(),
+        visible: true,
+        name: skill,
+        description: '',
+        level: 3,
+        keywords: []
+      }));
+
+      const emptySection = { id: '', name: '', columns: 1, separateLinks: true, visible: true, items: [] };
+
+      return {
+        basics,
+        sections: {
+          summary: {
+            id: 'summary', name: 'Summary', columns: 1, separateLinks: true, visible: true,
+            content: profile.bio || ''
+          },
+          experience: { id: 'experience', name: 'Experience', columns: 1, separateLinks: true, visible: true, items: experience },
+          education: { id: 'education', name: 'Education', columns: 1, separateLinks: true, visible: true, items: education },
+          skills: { id: 'skills', name: 'Skills', columns: 1, separateLinks: true, visible: true, items: skills },
+          awards: { ...emptySection, id: 'awards', name: 'Awards' },
+          certifications: { ...emptySection, id: 'certifications', name: 'Certifications' },
+          volunteer: { ...emptySection, id: 'volunteer', name: 'Volunteering' },
+          interests: { ...emptySection, id: 'interests', name: 'Interests' },
+          languages: { ...emptySection, id: 'languages', name: 'Languages' },
+          profiles: { ...emptySection, id: 'profiles', name: 'Profiles' },
+          projects: { ...emptySection, id: 'projects', name: 'Projects' },
+          publications: { ...emptySection, id: 'publications', name: 'Publications' },
+          references: { ...emptySection, id: 'references', name: 'References' },
+          custom: {}
+        },
+        metadata: {
+          template: 'rhyhorn',
+          layout: [[['summary', 'experience', 'education'], ['skills']]],
+          page: { margin: 18, format: 'a4', options: { breakLine: true, pageNumbers: true } },
+          theme: { background: '#ffffff', text: '#000000', primary: '#dc2626' },
+          typography: {
+            font: { family: 'Arial', subset: 'latin', variants: ['regular'], size: 14 },
+            lineHeight: 1.5,
+            hideIcons: false,
+            underlineLinks: true
+          },
+          css: { value: '', visible: false }
+        }
+      };
+    }
+  </script>
+</body>
+</html>
